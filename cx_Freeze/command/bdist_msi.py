@@ -26,7 +26,7 @@ for index, info in enumerate(sequence):
 
 
 # pylint: disable=attribute-defined-outside-init,missing-function-docstring
-# pylint: disable=too-many-lines
+# pylint: disable=too-many-lines,too-many-public-methods
 class BdistMSI(bdist_msi):
     """Create a Microsoft Installer (.msi) binary distribution."""
 
