@@ -26,7 +26,7 @@ for index, info in enumerate(sequence):
 
 
 # pylint: disable=attribute-defined-outside-init,missing-function-docstring
-# pylint: disable=too-many-lines
+# pylint: disable=too-many-lines,too-many-public-methods
 class BdistMSI(bdist_msi):
     """Create a Microsoft Installer (.msi) binary distribution."""
 
@@ -85,6 +85,7 @@ class BdistMSI(bdist_msi):
             'Allowed keys are "author", "comments", "keywords".',
         ),
         ("target-name=", None, "name of the file to create"),
+        ("target-version=", None, "version of the file to create"),
         ("upgrade-code=", None, "upgrade code to use"),
     ]
 
@@ -849,11 +850,13 @@ class BdistMSI(bdist_msi):
         self.install_script = None
         self.pre_install_script = None
         # cx_Freeze specific
+        self.plat_name = get_platform().replace("win-amd64", "win64")
         self.upgrade_code = None
         self.product_code = None
         self.add_to_path = None
         self.initial_target_dir = None
         self.target_name = None
+        self.target_version = None
         self.directories = None
         self.environment_variables = None
         self.data = None
@@ -888,9 +891,10 @@ class BdistMSI(bdist_msi):
         self.install_script_key = None
 
         # cx_Freeze specific
-        name = self.distribution.get_name()
-        fullname = self.distribution.get_fullname()
-        platform = get_platform().replace("win-amd64", "win64")
+        name = self.get_name()
+        fullname = self.get_fullname()
+        platform = self.plat_name
+        version = self.get_version()
         if self.initial_target_dir is None:
             if platform == "win64" or platform.startswith("mingw_x86_64"):
                 program_files_folder = "ProgramFiles64Folder"
@@ -899,12 +903,6 @@ class BdistMSI(bdist_msi):
             self.initial_target_dir = rf"[{program_files_folder}]\{name}"
         if self.add_to_path is None:
             self.add_to_path = False
-        if self.target_name is None:
-            self.target_name = fullname
-        if not self.target_name.lower().endswith(".msi"):
-            self.target_name = f"{self.target_name}-{platform}.msi"
-        if not os.path.isabs(self.target_name):
-            self.target_name = os.path.join(self.dist_dir, self.target_name)
         if self.directories is None:
             self.directories = []
         if self.environment_variables is None:
@@ -939,10 +937,8 @@ class BdistMSI(bdist_msi):
                     "Executable must be the base target name of one of the "
                     "distribution's executables"
                 ) from None
-            distribution_name = self.distribution.get_name()
             stem = os.path.splitext(executable)[0]
-            version = self.distribution.get_version()
-            progid = msilib.make_id(f"{distribution_name}.{stem}.{version}")
+            progid = msilib.make_id(f"{name}.{stem}.{version}")
             mime = extension.get("mime", None)
             # "%1" a better default for argument?
             argument = extension.get("argument", None)
@@ -1005,8 +1001,9 @@ class BdistMSI(bdist_msi):
         install.run()
 
         self.mkpath(self.dist_dir)
-        # fullname = self.distribution.get_fullname()
-        installer_name = os.path.abspath(self.target_name)
+        fullname = self.get_fullname()
+        installer_name = self.get_installer_filename(fullname)
+        installer_name = os.path.abspath(installer_name)
         if os.path.exists(installer_name):
             os.unlink(installer_name)
 
@@ -1030,7 +1027,7 @@ class BdistMSI(bdist_msi):
         self.db = msilib.init_database(
             installer_name,
             msilib.schema,
-            self.distribution.metadata.name,
+            self.get_name(),
             self.product_code,
             base_version,
             author,
@@ -1043,7 +1040,7 @@ class BdistMSI(bdist_msi):
         self.add_files()
         self.db.Commit()
         self.distribution.dist_files.append(
-            ("bdist_msi", base_version or "any", self.target_name)
+            ("bdist_msi", base_version or "any", self.get_name())
         )
 
         if not self.keep_temp:
@@ -1060,6 +1057,26 @@ class BdistMSI(bdist_msi):
         # is run programmatically from within a larger script, subsequent
         # editting of the MSI is blocked.
         self.db = None
+
+    def get_name(self):
+        return self.target_name or self.distribution.get_name()
+
+    def get_fullname(self):
+        return f"{self.get_name()}-{self.get_version()}"
+
+    def get_version(self):
+        return self.target_version or self.distribution.get_version()
+
+    def get_installer_filename(self, fullname):
+        # Factored out to allow overriding in subclasses
+        if self.target_version:
+            base_name = (
+                f"{fullname}-{self.plat_name}-{self.target_version}.msi"
+            )
+        else:
+            base_name = f"{fullname}-{self.plat_name}.msi"
+        installer_name = os.path.join(self.dist_dir, base_name)
+        return installer_name
 
 
 def _is_valid_guid(code):
