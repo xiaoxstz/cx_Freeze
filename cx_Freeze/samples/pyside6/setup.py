@@ -30,7 +30,7 @@ options = {
     }
 }
 
-executables = [Executable("test_pyside6.py", base=base)]
+executables = [Executable("test_pyside6.py", base=None)]
 
 setup(
     name="simple_PySide6",
